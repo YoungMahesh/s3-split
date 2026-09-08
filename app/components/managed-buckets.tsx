@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { formatBytes, type StorageQuotaUnit } from "@/lib/quota";
+import { ClientKeysModal } from "./client-keys-modal";
 
 export interface ManagedBucketItem {
   id: string;
@@ -69,6 +70,9 @@ export function ManagedBucketsManager() {
   const [inspectedBucket, setInspectedBucket] = useState<ManagedBucketItem | null>(null);
   const [bucketObjects, setBucketObjects] = useState<BucketObject[]>([]);
   const [isLoadingObjects, setIsLoadingObjects] = useState(false);
+
+  // Client Keys Management Modal
+  const [keysModalBucket, setKeysModalBucket] = useState<ManagedBucketItem | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -445,16 +449,32 @@ export function ManagedBucketsManager() {
                 </div>
 
                 {/* Bottom Actions */}
-                <div className="mt-5 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                <div className="mt-5 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2">
                   <button
                     type="button"
                     onClick={() => handleInspectObjects(bucket)}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 cursor-pointer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 cursor-pointer"
                   >
                     <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                     </svg>
-                    {bucket.objectCount} {bucket.objectCount === 1 ? "object" : "objects"} tracked
+                    {bucket.objectCount} {bucket.objectCount === 1 ? "object" : "objects"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setKeysModalBucket(bucket)}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-700 hover:text-indigo-600 dark:text-zinc-300 dark:hover:text-indigo-400 cursor-pointer"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+                      />
+                    </svg>
+                    Keys
                   </button>
 
                   <button
@@ -736,6 +756,14 @@ export function ManagedBucketsManager() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Client Keys Modal */}
+      {keysModalBucket && (
+        <ClientKeysModal
+          bucket={keysModalBucket}
+          onClose={() => setKeysModalBucket(null)}
+        />
       )}
     </div>
   );

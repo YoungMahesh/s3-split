@@ -4,15 +4,15 @@
 
 **Blocked by:** 02: Managed Bucket Creation, Storage Quotas & Baseline Crawl
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A user can generate a new Client Key for a Managed Bucket, providing a friendly name and selecting a permission level (`read_write` or `read_only`).
-- [ ] The generated secret access key is displayed in a one-time reveal dialog with clear instructions to save it immediately, and stored encrypted at rest with AES-256-GCM.
-- [ ] The key generation modal presents copy-paste configuration snippets containing the custom endpoint URL, bucket name, access key ID, and secret access key for:
+- [x] A user can generate a new Client Key for a Managed Bucket, providing a friendly name and selecting a permission level (`read_write` or `read_only`).
+- [x] The generated secret access key is displayed in a one-time reveal dialog with clear instructions to save it immediately, and stored encrypted at rest with AES-256-GCM.
+- [x] The key generation modal presents copy-paste configuration snippets containing the custom endpoint URL, bucket name, access key ID, and secret access key for:
   - Environment variables (`.env`)
   - Node.js (`@aws-sdk/client-s3`)
   - Python (`boto3`)
   - AWS CLI (`aws configure`)
-- [ ] The user can view a list of all active Client Keys bound to a Managed Bucket, showing key name, access key ID, permission scope, creation date, and last used timestamp.
-- [ ] A user can immediately revoke an active Client Key, preventing it from authenticating against the gateway.
-- [ ] Automated tests verify key generation, secret encryption round-trip, one-time reveal state, and revocation gating.
+- [x] The user can view a list of all active Client Keys bound to a Managed Bucket, showing key name, access key ID, permission scope, creation date, and last used timestamp.
+- [x] A user can immediately revoke an active Client Key, preventing it from authenticating against the gateway.
+- [x] Automated tests verify key generation, secret encryption round-trip, one-time reveal state, and revocation gating.

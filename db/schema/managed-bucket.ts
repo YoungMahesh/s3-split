@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import { upstreamAccount } from "./upstream-account";
+import { clientKey } from "./client-key";
 
 export const managedBucket = pgTable(
   "managed_bucket",
@@ -78,6 +79,7 @@ export const managedBucketRelations = relations(
       references: [upstreamAccount.id],
     }),
     objects: many(managedObjects),
+    clientKeys: many(clientKey),
   }),
 );
 
