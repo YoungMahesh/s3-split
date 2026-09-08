@@ -70,6 +70,11 @@ export function ManagedBucketsManager() {
   const [inspectedBucket, setInspectedBucket] = useState<ManagedBucketItem | null>(null);
   const [bucketObjects, setBucketObjects] = useState<BucketObject[]>([]);
   const [isLoadingObjects, setIsLoadingObjects] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
+  const [reconcileMessage, setReconcileMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   // Client Keys Management Modal
   const [keysModalBucket, setKeysModalBucket] = useState<ManagedBucketItem | null>(null);
@@ -234,6 +239,7 @@ export function ManagedBucketsManager() {
     setInspectedBucket(bucket);
     setIsLoadingObjects(true);
     setBucketObjects([]);
+    setReconcileMessage(null);
 
     try {
       const res = await fetch(`/api/managed-buckets/${bucket.id}`);
@@ -246,6 +252,65 @@ export function ManagedBucketsManager() {
       console.error(err);
     } finally {
       setIsLoadingObjects(false);
+    }
+  };
+
+  const handleReconcileStorage = async (bucketId: string) => {
+    setIsReconciling(true);
+    setReconcileMessage(null);
+
+    try {
+      const res = await fetch(`/api/managed-buckets/${bucketId}/reconcile`, {
+        method: "POST",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setReconcileMessage({
+          type: "error",
+          text: data.error || "Failed to reconcile storage with upstream provider.",
+        });
+        return;
+      }
+
+      const { reconciliation, bucket: updatedBucket, objects: updatedObjects } = data;
+
+      if (updatedObjects) {
+        setBucketObjects(updatedObjects);
+      }
+
+      if (updatedBucket) {
+        setInspectedBucket(updatedBucket);
+        setBuckets((prev) =>
+          prev.map((b) =>
+            b.id === updatedBucket.id
+              ? {
+                  ...b,
+                  ...updatedBucket,
+                  objectCount: updatedObjects?.length ?? b.objectCount,
+                }
+              : b,
+          ),
+        );
+      }
+
+      const driftPrefix = reconciliation.driftBytes > 0 ? "+" : "";
+      const formattedDrift = `${driftPrefix}${formatBytes(reconciliation.driftBytes)}`;
+      setReconcileMessage({
+        type: "success",
+        text: `Reconciliation complete: ${reconciliation.addedCount} added, ${reconciliation.deletedCount} deleted, ${reconciliation.updatedCount} updated. Drift: ${formattedDrift}. Total storage: ${formatBytes(reconciliation.usedBytes)}.`,
+      });
+    } catch (err: unknown) {
+      setReconcileMessage({
+        type: "error",
+        text:
+          err instanceof Error
+            ? err.message
+            : "An unexpected error occurred during storage reconciliation.",
+      });
+    } finally {
+      setIsReconciling(false);
     }
   };
 
@@ -682,45 +747,128 @@ export function ManagedBucketsManager() {
         </div>
       )}
 
-      {/* Object Inspection Modal */}
+      {/* Object Inspection / Bucket Detail Modal */}
       {inspectedBucket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+          <div className="w-full max-w-3xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+            {/* Modal Header */}
+            <div className="flex flex-col gap-3 pb-4 border-b border-zinc-100 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                  Tracked Objects: <span className="font-mono text-indigo-600 dark:text-indigo-400">{inspectedBucket.name}</span>
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Indexed from upstream storage during baseline crawl
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 font-mono">
+                    {inspectedBucket.name}
+                  </h3>
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                      inspectedBucket.status === "quota_exceeded" || inspectedBucket.progress.isExceeded
+                        ? "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400 border border-red-200 dark:border-red-900"
+                        : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900"
+                    }`}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        inspectedBucket.status === "quota_exceeded" || inspectedBucket.progress.isExceeded
+                          ? "bg-red-500"
+                          : "bg-emerald-500"
+                      }`}
+                    />
+                    {inspectedBucket.status === "quota_exceeded" || inspectedBucket.progress.isExceeded
+                      ? "Quota Exceeded"
+                      : "Active"}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                  Target: <span className="font-mono text-zinc-700 dark:text-zinc-300">{inspectedBucket.upstreamBucket}</span>
+                  {inspectedBucket.virtualPrefix && (
+                    <span> (prefix: <span className="font-mono text-indigo-600 dark:text-indigo-400">{inspectedBucket.virtualPrefix}</span>)</span>
+                  )}
+                  {" • "}
+                  Capacity: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{inspectedBucket.progress.formattedUsed} / {inspectedBucket.progress.formattedQuota} ({inspectedBucket.progress.percentage}%)</span>
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setInspectedBucket(null)}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
-              >
-                ✕
-              </button>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  id="reconcile-storage-btn"
+                  onClick={() => handleReconcileStorage(inspectedBucket.id)}
+                  disabled={isReconciling}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition-all hover:bg-indigo-500 active:scale-98 disabled:opacity-50 cursor-pointer"
+                >
+                  {isReconciling ? (
+                    <>
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      Reconciling Storage...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Reconcile Storage
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setInspectedBucket(null)}
+                  className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
+                  title="Close"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
+            {/* Reconciliation Feedback Alert */}
+            {reconcileMessage && (
+              <div
+                role="status"
+                className={`mt-4 flex items-center justify-between rounded-xl border p-3 text-xs ${
+                  reconcileMessage.type === "success"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    : "border-red-200 bg-red-50 text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {reconcileMessage.type === "success" ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    )}
+                  </svg>
+                  <span>{reconcileMessage.text}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReconcileMessage(null)}
+                  className="ml-3 font-semibold hover:opacity-75 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Tracked Objects Table */}
             <div className="mt-4 max-h-96 overflow-auto">
               {isLoadingObjects ? (
                 <div className="py-12 text-center text-xs text-zinc-500 dark:text-zinc-400 animate-pulse">
                   Loading tracked objects...
                 </div>
               ) : bucketObjects.length === 0 ? (
-                <div className="py-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
-                  No objects indexed in this bucket yet.
+                <div className="py-10 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                  No objects indexed in this bucket yet. Click &ldquo;Reconcile Storage&rdquo; to scan upstream S3.
                 </div>
               ) : (
                 <table className="w-full text-left text-xs">
-                  <thead className="border-b border-zinc-200 bg-zinc-50 font-semibold text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+                  <thead className="sticky top-0 border-b border-zinc-200 bg-zinc-50 font-semibold text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
                     <tr>
-                      <th className="py-2 px-3">Key</th>
-                      <th className="py-2 px-3">Size</th>
-                      <th className="py-2 px-3">ETag</th>
-                      <th className="py-2 px-3">Last Modified</th>
+                      <th className="py-2.5 px-3">Object Key</th>
+                      <th className="py-2.5 px-3">Size</th>
+                      <th className="py-2.5 px-3">ETag</th>
+                      <th className="py-2.5 px-3">Last Modified</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
@@ -736,7 +884,9 @@ export function ManagedBucketsManager() {
                           {obj.etag || "-"}
                         </td>
                         <td className="py-2 px-3 text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
-                          {obj.lastModified ? new Date(obj.lastModified).toLocaleDateString() : "-"}
+                          {obj.lastModified
+                            ? new Date(obj.lastModified).toLocaleString()
+                            : "-"}
                         </td>
                       </tr>
                     ))}
@@ -745,7 +895,16 @@ export function ManagedBucketsManager() {
               )}
             </div>
 
-            <div className="mt-4 flex justify-end pt-3 border-t border-zinc-100 dark:border-zinc-800">
+            {/* Modal Footer */}
+            <div className="mt-4 flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400">
+              <div>
+                <span>{bucketObjects.length} active tracked {bucketObjects.length === 1 ? "object" : "objects"}</span>
+                {bucketObjects.length > 0 && (
+                  <span className="ml-2 font-medium text-zinc-700 dark:text-zinc-300">
+                    ({formatBytes(bucketObjects.reduce((acc, o) => acc + o.sizeBytes, 0))})
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setInspectedBucket(null)}

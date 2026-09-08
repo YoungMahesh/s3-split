@@ -15,6 +15,9 @@ import {
   upstreamAccount,
   managedBucket,
   managedObjects,
+  clientKey,
+  multipartUploads,
+  partReservations,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { encryptSecret } from "@/lib/crypto";
@@ -485,5 +488,89 @@ describe("Managed Buckets API", () => {
       .from(managedObjects)
       .where(eq(managedObjects.managedBucketId, b.id));
     expect(foundObject).toHaveLength(0);
+  });
+
+  it("deletes a managed bucket and cascades to revoke all associated client keys and reservations", async () => {
+    vi.spyOn(authLib.auth.api, "getSession").mockResolvedValue(mockSession);
+
+    const [b] = await db
+      .insert(managedBucket)
+      .values({
+        id: "b-cascade-test",
+        userId: testUserId,
+        upstreamAccountId: testUpstreamAccountId,
+        name: "cascade-test",
+        upstreamBucket: "delete-me-all",
+        bucketType: "physical",
+        storageQuotaBytes: 1000,
+        usedBytes: 500,
+        status: "active",
+      })
+      .returning();
+
+    await db.insert(managedObjects).values({
+      id: "obj-cascade",
+      managedBucketId: b.id,
+      key: "item.txt",
+      sizeBytes: 500,
+    });
+
+    await db.insert(clientKey).values({
+      id: "key-cascade",
+      userId: testUserId,
+      managedBucketId: b.id,
+      name: "Test Cascade Key",
+      accessKeyId: "SPLITCAS1234567890",
+      encryptedSecretAccessKey: encryptSecret("secret-val"),
+      permission: "read_write",
+      status: "active",
+    });
+
+    await db.insert(multipartUploads).values({
+      id: "mp-cascade",
+      managedBucketId: b.id,
+      key: "bigfile.bin",
+      uploadId: "upl-cascade-1",
+      upstreamKey: "bigfile.bin",
+    });
+
+    await db.insert(partReservations).values({
+      id: "res-cascade",
+      managedBucketId: b.id,
+      uploadId: "upl-cascade-1",
+      partNumber: 1,
+      sizeBytes: 500,
+    });
+
+    const deleteReq = new Request(`http://localhost/api/managed-buckets/${b.id}`, {
+      method: "DELETE",
+    });
+    const deleteRes = await deleteManagedBucket(deleteReq, {
+      params: Promise.resolve({ id: b.id }),
+    });
+    expect(deleteRes.status).toBe(200);
+
+    // Verify bucket deleted
+    expect(
+      await db.select().from(managedBucket).where(eq(managedBucket.id, b.id)),
+    ).toHaveLength(0);
+
+    // Verify objects cascade deleted
+    expect(
+      await db.select().from(managedObjects).where(eq(managedObjects.managedBucketId, b.id)),
+    ).toHaveLength(0);
+
+    // Verify client keys cascade deleted (revoked)
+    expect(
+      await db.select().from(clientKey).where(eq(clientKey.managedBucketId, b.id)),
+    ).toHaveLength(0);
+
+    // Verify multipart uploads & reservations cascade deleted
+    expect(
+      await db.select().from(multipartUploads).where(eq(multipartUploads.managedBucketId, b.id)),
+    ).toHaveLength(0);
+    expect(
+      await db.select().from(partReservations).where(eq(partReservations.managedBucketId, b.id)),
+    ).toHaveLength(0);
   });
 });

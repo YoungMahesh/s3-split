@@ -4,11 +4,11 @@
 
 **Blocked by:** 04: S3 Gateway Proxy & Storage Quota Enforcement
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A "Reconcile Storage" button is available on the Managed Bucket detail view in the dashboard.
-- [ ] Clicking "Reconcile Storage" triggers a background/on-demand upstream `ListObjectsV2` crawl of the bucket/prefix.
-- [ ] The reconciliation process updates the `managed_objects` table, removing records for objects deleted upstream and inserting records for newly detected objects, then recalculates `used_bytes` accurately.
-- [ ] The bucket detail view displays a table of active tracked objects (key, size, last modified timestamp).
-- [ ] A user can delete a Managed Bucket, which cascades to revoke all associated Client Keys, remove object registry records, and release resources (without deleting upstream files unless explicitly requested).
-- [ ] Automated tests verify reconciliation against simulated upstream changes (detecting out-of-band additions and deletions) and proper cascade cleanup upon bucket deletion.
+- [x] A "Reconcile Storage" button is available on the Managed Bucket detail view in the dashboard.
+- [x] Clicking "Reconcile Storage" triggers a background/on-demand upstream `ListObjectsV2` crawl of the bucket/prefix.
+- [x] The reconciliation process updates the `managed_objects` table, removing records for objects deleted upstream and inserting records for newly detected objects, then recalculates `used_bytes` accurately.
+- [x] The bucket detail view displays a table of active tracked objects (key, size, last modified timestamp).
+- [x] A user can delete a Managed Bucket, which cascades to revoke all associated Client Keys, remove object registry records, and release resources (without deleting upstream files unless explicitly requested).
+- [x] Automated tests verify reconciliation against simulated upstream changes (detecting out-of-band additions and deletions) and proper cascade cleanup upon bucket deletion.
