@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn, signUp, signOut } from "@/lib/auth-client";
 import { UpstreamAccountsManager } from "@/app/components/upstream-accounts";
+import { ManagedBucketsManager } from "@/app/components/managed-buckets";
 
 export default function HomePage() {
   const router = useRouter();
@@ -195,6 +196,11 @@ export default function HomePage() {
           {/* Upstream Account Connection Section */}
           <section aria-labelledby="upstream-section">
             <UpstreamAccountsManager />
+          </section>
+
+          {/* Managed Buckets Section */}
+          <section aria-labelledby="buckets-section">
+            <ManagedBucketsManager />
           </section>
 
           {/* Collapsible Session & Developer Diagnostics */}

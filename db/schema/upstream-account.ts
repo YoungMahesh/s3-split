@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm/_relations";
 import { pgTable, text, timestamp, index } from "drizzle-orm/pg-core";
 import { user } from "./auth";
+import { managedBucket } from "./managed-bucket";
 
 export const upstreamAccount = pgTable(
   "upstream_account",
@@ -25,10 +26,11 @@ export const upstreamAccount = pgTable(
 
 export const upstreamAccountRelations = relations(
   upstreamAccount,
-  ({ one }) => ({
+  ({ one, many }) => ({
     user: one(user, {
       fields: [upstreamAccount.userId],
       references: [user.id],
     }),
+    managedBuckets: many(managedBucket),
   }),
 );

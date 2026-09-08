@@ -4,11 +4,11 @@
 
 **Blocked by:** 01: Upstream Account Connection & Credential Encryption
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A user can create a Managed Bucket by selecting an Upstream Account, providing a tenant-scoped bucket name, choosing between physical 1:1 bucket or virtual prefix bucket, and setting a Storage Quota (with MB, GB, or TB unit selection).
-- [ ] For virtual prefix buckets, a distinct key prefix is generated and assigned so that all objects reside in an isolated namespace within the shared upstream physical bucket.
-- [ ] On bucket creation, the system runs an initial crawl of the upstream bucket/prefix to populate the local object registry and calculate the baseline storage consumption (`used_bytes`).
-- [ ] If pre-existing objects already exceed the configured Storage Quota, the bucket is created with its status set to quota exceeded.
-- [ ] The dashboard lists all Managed Buckets owned by the user, showing their name, upstream mapping type, capacity progress bar (`used_bytes / storage_quota`), and health status.
-- [ ] Automated tests verify bucket creation, virtual prefix allocation, baseline crawl accuracy, and progress bar calculations.
+- [x] A user can create a Managed Bucket by selecting an Upstream Account, providing a tenant-scoped bucket name, choosing between physical 1:1 bucket or virtual prefix bucket, and setting a Storage Quota (with MB, GB, or TB unit selection).
+- [x] For virtual prefix buckets, a distinct key prefix is generated and assigned so that all objects reside in an isolated namespace within the shared upstream physical bucket.
+- [x] On bucket creation, the system runs an initial crawl of the upstream bucket/prefix to populate the local object registry and calculate the baseline storage consumption (`used_bytes`).
+- [x] If pre-existing objects already exceed the configured Storage Quota, the bucket is created with its status set to quota exceeded.
+- [x] The dashboard lists all Managed Buckets owned by the user, showing their name, upstream mapping type, capacity progress bar (`used_bytes / storage_quota`), and health status.
+- [x] Automated tests verify bucket creation, virtual prefix allocation, baseline crawl accuracy, and progress bar calculations.
