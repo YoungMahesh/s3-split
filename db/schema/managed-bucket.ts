@@ -10,6 +10,7 @@ import {
 import { user } from "./auth";
 import { upstreamAccount } from "./upstream-account";
 import { clientKey } from "./client-key";
+import { multipartUploads, partReservations } from "./multipart-upload";
 
 export const managedBucket = pgTable(
   "managed_bucket",
@@ -80,6 +81,8 @@ export const managedBucketRelations = relations(
     }),
     objects: many(managedObjects),
     clientKeys: many(clientKey),
+    multipartUploads: many(multipartUploads),
+    partReservations: many(partReservations),
   }),
 );
 

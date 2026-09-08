@@ -9,6 +9,19 @@ import {
   signS3Request,
   buildS3XmlError,
 } from "./sigv4";
+import {
+  createMultipartUploadRecord,
+  getMultipartUpload,
+  getPendingReservations,
+  savePartReservation,
+  completeMultipartUploadRecord,
+  abortMultipartUploadRecord,
+  cleanupExpiredMultipartUploads,
+  transformInitiateMultipartUploadXml,
+  transformCompleteMultipartUploadXml,
+  extractUploadIdFromXml,
+  extractEtagFromXml,
+} from "./multipart";
 
 export interface GatewayContext {
   bucketName: string;
@@ -244,6 +257,132 @@ export async function handleS3GatewayRequest(
       );
     }
 
+    const uploadId = url.searchParams.get("uploadId");
+    const partNumberStr = url.searchParams.get("partNumber");
+
+    // -----------------------------------------------------------
+    // Handle UploadPart (PUT with uploadId and partNumber)
+    // -----------------------------------------------------------
+    if (uploadId && partNumberStr) {
+      const partNumber = parseInt(partNumberStr, 10);
+      if (isNaN(partNumber) || partNumber < 1 || partNumber > 10000) {
+        return xmlResponse(
+          buildS3XmlError(
+            "InvalidArgument",
+            "Part number must be an integer between 1 and 10000.",
+            url.pathname,
+          ),
+        );
+      }
+
+      // Verify multipart upload exists
+      const uploadRecord = await getMultipartUpload({
+        managedBucketId: bucket.id,
+        uploadId,
+      });
+
+      if (!uploadRecord) {
+        return xmlResponse(
+          buildS3XmlError(
+            "NoSuchUpload",
+            "The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.",
+            uploadId,
+          ),
+        );
+      }
+
+      const incomingSize = bodyBuffer.byteLength;
+
+      // Quota reservation check:
+      // used_bytes + pending_reservations + part_size <= storage_quota_bytes
+      const pendingReservations = await getPendingReservations(
+        bucket.id,
+        uploadId,
+        partNumber,
+      );
+      const projectedTotal =
+        bucket.usedBytes + pendingReservations + incomingSize;
+
+      if (projectedTotal > bucket.storageQuotaBytes) {
+        return xmlResponse(
+          buildS3XmlError(
+            "QuotaExceeded",
+            `Storage quota exceeded for bucket '${bucket.name}'. Current used: ${bucket.usedBytes} bytes, Pending reservations: ${pendingReservations} bytes, Incoming part: ${incomingSize} bytes, Storage Quota: ${bucket.storageQuotaBytes} bytes.`,
+            url.pathname,
+          ),
+        );
+      }
+
+      // Proxy part write upstream
+      const upstreamUrl = buildUpstreamUrl(upstreamKey);
+      upstreamUrl.searchParams.set("uploadId", uploadId);
+      upstreamUrl.searchParams.set("partNumber", String(partNumber));
+
+      const signedHeaders = signS3Request({
+        method: "PUT",
+        url: upstreamUrl,
+        region: upstreamAccount.region,
+        accessKeyId: upstreamAccount.accessKeyId,
+        secretAccessKey: upstreamAccount.secretAccessKey,
+        body: bodyBuffer,
+        headers: {
+          "content-length": String(incomingSize),
+        },
+      });
+
+      let upstreamRes: Response;
+      try {
+        upstreamRes = await fetch(upstreamUrl.toString(), {
+          method: "PUT",
+          headers: signedHeaders,
+          body: bodyBuffer,
+        });
+      } catch {
+        return xmlResponse(
+          buildS3XmlError(
+            "BadGateway",
+            "Failed to stream multipart upload part payload to upstream S3 provider.",
+            url.pathname,
+          ),
+        );
+      }
+
+      if (!upstreamRes.ok) {
+        const errorBody = await upstreamRes.text();
+        return new Response(errorBody, {
+          status: upstreamRes.status,
+          headers: {
+            "Content-Type":
+              upstreamRes.headers.get("content-type") ||
+              "application/xml; charset=utf-8",
+          },
+        });
+      }
+
+      // Extract ETag
+      const rawEtag = upstreamRes.headers.get("etag");
+      const etag = rawEtag
+        ? rawEtag.replace(/^"|"$/g, "")
+        : md5Hex(bodyBuffer);
+
+      // Record byte reservation
+      await savePartReservation({
+        managedBucketId: bucket.id,
+        uploadId,
+        partNumber,
+        sizeBytes: incomingSize,
+        etag,
+      });
+
+      return new Response(null, {
+        status: 200,
+        headers: {
+          ETag: `"${etag}"`,
+          "Content-Length": "0",
+        },
+      });
+    }
+
     const incomingSize = bodyBuffer.byteLength;
 
     // Check existing object in local registry for net delta calculation
@@ -376,10 +515,46 @@ export async function handleS3GatewayRequest(
       return xmlResponse(
         buildS3XmlError(
           "MethodNotAllowed",
-          "A key name must be specified to delete an object.",
+          "A key name must be specified to delete an object or abort an upload.",
           url.pathname,
         ),
       );
+    }
+
+    const uploadId = url.searchParams.get("uploadId");
+
+    // -----------------------------------------------------------
+    // Handle AbortMultipartUpload (DELETE with uploadId)
+    // -----------------------------------------------------------
+    if (uploadId) {
+      const upstreamUrl = buildUpstreamUrl(upstreamKey);
+      upstreamUrl.searchParams.set("uploadId", uploadId);
+
+      const signedHeaders = signS3Request({
+        method: "DELETE",
+        url: upstreamUrl,
+        region: upstreamAccount.region,
+        accessKeyId: upstreamAccount.accessKeyId,
+        secretAccessKey: upstreamAccount.secretAccessKey,
+      });
+
+      try {
+        await fetch(upstreamUrl.toString(), {
+          method: "DELETE",
+          headers: signedHeaders,
+        });
+      } catch {
+        // Upstream errors should not prevent local reservation release
+      }
+
+      await abortMultipartUploadRecord({
+        managedBucketId: bucket.id,
+        uploadId,
+      });
+
+      return new Response(null, {
+        status: 204,
+      });
     }
 
     // DeleteObject succeeds even when the bucket's Storage Quota is exceeded
@@ -620,6 +795,205 @@ export async function handleS3GatewayRequest(
       status: upstreamRes.status,
       headers: forwardHeaders,
     });
+  }
+
+  // -------------------------------------------------------------
+  // Handle POST (CreateMultipartUpload or CompleteMultipartUpload)
+  // -------------------------------------------------------------
+  if (method === "POST") {
+    if (!objectKey) {
+      return xmlResponse(
+        buildS3XmlError(
+          "MethodNotAllowed",
+          "A key name must be specified for multipart upload operations.",
+          url.pathname,
+        ),
+      );
+    }
+
+    // 1. CreateMultipartUpload (POST /:bucket/:key?uploads)
+    if (url.searchParams.has("uploads")) {
+      // Lazy cleanup of expired multipart uploads
+      cleanupExpiredMultipartUploads(bucket.id).catch(() => {});
+
+      const upstreamUrl = buildUpstreamUrl(upstreamKey);
+      upstreamUrl.searchParams.set("uploads", "");
+
+      const signedHeaders = signS3Request({
+        method: "POST",
+        url: upstreamUrl,
+        region: upstreamAccount.region,
+        accessKeyId: upstreamAccount.accessKeyId,
+        secretAccessKey: upstreamAccount.secretAccessKey,
+        headers: {
+          "content-length": "0",
+        },
+      });
+
+      let upstreamRes: Response;
+      try {
+        upstreamRes = await fetch(upstreamUrl.toString(), {
+          method: "POST",
+          headers: signedHeaders,
+        });
+      } catch {
+        return xmlResponse(
+          buildS3XmlError(
+            "BadGateway",
+            "Failed to initiate multipart upload with upstream S3 provider.",
+            url.pathname,
+          ),
+        );
+      }
+
+      if (!upstreamRes.ok) {
+        const errorBody = await upstreamRes.text();
+        return new Response(errorBody, {
+          status: upstreamRes.status,
+          headers: {
+            "Content-Type":
+              upstreamRes.headers.get("content-type") ||
+              "application/xml; charset=utf-8",
+          },
+        });
+      }
+
+      const rawXml = await upstreamRes.text();
+      const uploadId = extractUploadIdFromXml(rawXml);
+
+      if (!uploadId) {
+        return xmlResponse(
+          buildS3XmlError(
+            "BadGateway",
+            "Invalid response from upstream S3 provider: missing UploadId.",
+            url.pathname,
+          ),
+        );
+      }
+
+      // Record multipart upload session
+      await createMultipartUploadRecord({
+        managedBucketId: bucket.id,
+        key: objectKey,
+        uploadId,
+        upstreamKey,
+      });
+
+      const transformedXml = transformInitiateMultipartUploadXml(
+        rawXml,
+        bucket.name,
+        objectKey,
+      );
+
+      return new Response(transformedXml, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/xml; charset=utf-8",
+        },
+      });
+    }
+
+    // 2. CompleteMultipartUpload (POST /:bucket/:key?uploadId=...)
+    if (url.searchParams.has("uploadId")) {
+      const uploadId = url.searchParams.get("uploadId")!;
+
+      const uploadRecord = await getMultipartUpload({
+        managedBucketId: bucket.id,
+        uploadId,
+      });
+
+      if (!uploadRecord) {
+        return xmlResponse(
+          buildS3XmlError(
+            "NoSuchUpload",
+            "The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.",
+            uploadId,
+          ),
+        );
+      }
+
+      const upstreamUrl = buildUpstreamUrl(upstreamKey);
+      upstreamUrl.searchParams.set("uploadId", uploadId);
+
+      const contentType =
+        request.headers.get("content-type") || "application/xml";
+
+      const signedHeaders = signS3Request({
+        method: "POST",
+        url: upstreamUrl,
+        region: upstreamAccount.region,
+        accessKeyId: upstreamAccount.accessKeyId,
+        secretAccessKey: upstreamAccount.secretAccessKey,
+        body: bodyBuffer,
+        headers: {
+          "content-type": contentType,
+          "content-length": String(bodyBuffer.byteLength),
+        },
+      });
+
+      let upstreamRes: Response;
+      try {
+        upstreamRes = await fetch(upstreamUrl.toString(), {
+          method: "POST",
+          headers: signedHeaders,
+          body: bodyBuffer,
+        });
+      } catch {
+        return xmlResponse(
+          buildS3XmlError(
+            "BadGateway",
+            "Failed to complete multipart upload with upstream S3 provider.",
+            url.pathname,
+          ),
+        );
+      }
+
+      if (!upstreamRes.ok) {
+        const errorBody = await upstreamRes.text();
+        return new Response(errorBody, {
+          status: upstreamRes.status,
+          headers: {
+            "Content-Type":
+              upstreamRes.headers.get("content-type") ||
+              "application/xml; charset=utf-8",
+          },
+        });
+      }
+
+      const rawXml = await upstreamRes.text();
+      const etag = extractEtagFromXml(rawXml) || md5Hex(bodyBuffer);
+
+      // Convert part reservations into permanent object & update quota ledger
+      await completeMultipartUploadRecord({
+        managedBucketId: bucket.id,
+        uploadId,
+        key: objectKey,
+        etag,
+        storageQuotaBytes: bucket.storageQuotaBytes,
+        currentUsedBytes: bucket.usedBytes,
+      });
+
+      const transformedXml = transformCompleteMultipartUploadXml(
+        rawXml,
+        bucket.name,
+        objectKey,
+      );
+
+      return new Response(transformedXml, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/xml; charset=utf-8",
+        },
+      });
+    }
+
+    return xmlResponse(
+      buildS3XmlError(
+        "MethodNotAllowed",
+        "POST request is missing 'uploads' or 'uploadId' parameter.",
+        url.pathname,
+      ),
+    );
   }
 
   return xmlResponse(

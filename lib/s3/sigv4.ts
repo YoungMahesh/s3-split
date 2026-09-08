@@ -343,6 +343,7 @@ export function buildS3XmlError(
       break;
     case "NoSuchKey":
     case "NoSuchBucket":
+    case "NoSuchUpload":
       status = 404;
       break;
     case "MethodNotAllowed":
