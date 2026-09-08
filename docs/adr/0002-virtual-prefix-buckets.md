@@ -1,0 +1,3 @@
+# Virtual Prefix Buckets for Managed Storage
+
+Creating physical S3 buckets upstream requires broad administrative permissions (`s3:CreateBucket`), hits provider bucket limits (e.g. 100 per AWS account), and requires globally unique naming. We decided to support virtual prefix buckets where a single upstream physical bucket is subdivided into multiple isolated managed buckets using key prefixes, transparently rewriting paths in the S3 gateway. This enables users with restricted or single-bucket credentials to partition storage and enforce independent quotas without creating new upstream infrastructure.
