@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn, signUp, signOut } from "@/lib/auth-client";
+import { UpstreamAccountsManager } from "@/app/components/upstream-accounts";
 
 export default function HomePage() {
   const router = useRouter();
@@ -126,6 +127,124 @@ export default function HomePage() {
     }
   };
 
+  if (session?.user) {
+    return (
+      <div className="min-h-screen bg-zinc-50 text-zinc-900 transition-colors dark:bg-zinc-950 dark:text-zinc-100">
+        {/* Navigation Bar */}
+        <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/80 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/80">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-white font-black dark:bg-zinc-100 dark:text-zinc-900">
+                S3
+              </div>
+              <div>
+                <span className="font-bold text-base tracking-tight text-zinc-900 dark:text-zinc-100">
+                  S3-Split
+                </span>
+                <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                  Storage Gateway
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="hidden sm:flex flex-col text-right">
+                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                  {session.user.name || "Signed-in User"}
+                </span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
+                  {session.user.email}
+                </span>
+              </div>
+              <button
+                type="button"
+                id="sign-out-btn"
+                onClick={handleSignOut}
+                disabled={isSubmitting}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950/40 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? "Signing out..." : "Sign Out"}
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content Area */}
+        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+          {/* Global Alerts */}
+          {errorMessage && (
+            <div
+              role="alert"
+              className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+            >
+              <p className="font-semibold">Error</p>
+              <p className="mt-0.5">{errorMessage}</p>
+            </div>
+          )}
+
+          {successMessage && (
+            <div
+              role="status"
+              className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300"
+            >
+              <p className="font-semibold">Success</p>
+              <p className="mt-0.5">{successMessage}</p>
+            </div>
+          )}
+
+          {/* Upstream Account Connection Section */}
+          <section aria-labelledby="upstream-section">
+            <UpstreamAccountsManager />
+          </section>
+
+          {/* Collapsible Session & Developer Diagnostics */}
+          <section className="pt-6 border-t border-zinc-200 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setShowRawSession(!showRawSession)}
+              className="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer"
+            >
+              {showRawSession
+                ? "▼ Hide Session & Diagnostic Details"
+                : "▶ Show Session & Diagnostic Details"}
+            </button>
+
+            {showRawSession && (
+              <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-950">
+                    <span className="text-zinc-500 block">User ID</span>
+                    <span className="font-mono text-zinc-800 dark:text-zinc-200 truncate block mt-0.5">
+                      {session.user.id}
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-950">
+                    <span className="text-zinc-500 block">Session ID</span>
+                    <span className="font-mono text-zinc-800 dark:text-zinc-200 truncate block mt-0.5">
+                      {session.session?.id}
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-950">
+                    <span className="text-zinc-500 block">Expires At</span>
+                    <span className="text-zinc-800 dark:text-zinc-200 block mt-0.5">
+                      {session.session?.expiresAt
+                        ? new Date(session.session.expiresAt).toLocaleString()
+                        : "N/A"}
+                    </span>
+                  </div>
+                </div>
+
+                <pre className="max-h-56 overflow-auto rounded-lg bg-zinc-950 p-3 text-left font-mono text-xs text-zinc-100 dark:bg-black border border-zinc-800">
+                  {JSON.stringify(session, null, 2)}
+                </pre>
+              </div>
+            )}
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12 text-zinc-900 transition-colors dark:bg-zinc-950 dark:text-zinc-100">
       <main className="w-full max-w-md space-y-6">
@@ -174,84 +293,6 @@ export default function HomePage() {
                 <div className="h-10 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
                 <div className="h-10 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
               </div>
-            </div>
-          ) : session?.user ? (
-            /* Logged-In State */
-            <div className="p-6 sm:p-8 space-y-6">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-xl font-bold text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100">
-                  {session.user.name
-                    ? session.user.name.charAt(0).toUpperCase()
-                    : session.user.email?.charAt(0).toUpperCase() || "U"}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                    {session.user.name || "Signed-in User"}
-                  </h2>
-                  <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">
-                    {session.user.email}
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-zinc-100 bg-zinc-50/60 p-4 text-xs space-y-2 dark:border-zinc-800 dark:bg-zinc-950/50">
-                <div className="flex justify-between">
-                  <span className="text-zinc-500 dark:text-zinc-400">
-                    User ID
-                  </span>
-                  <span className="font-mono text-zinc-700 dark:text-zinc-300 truncate max-w-[200px]">
-                    {session.user.id}
-                  </span>
-                </div>
-                {session.session?.id && (
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500 dark:text-zinc-400">
-                      Session ID
-                    </span>
-                    <span className="font-mono text-zinc-700 dark:text-zinc-300 truncate max-w-[200px]">
-                      {session.session.id}
-                    </span>
-                  </div>
-                )}
-                {session.session?.expiresAt && (
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500 dark:text-zinc-400">
-                      Expires At
-                    </span>
-                    <span className="text-zinc-700 dark:text-zinc-300">
-                      {new Date(session.session.expiresAt).toLocaleString()}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="space-y-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  disabled={isSubmitting}
-                  className="flex w-full items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {isSubmitting ? "Signing out..." : "Sign Out"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowRawSession(!showRawSession)}
-                  className="w-full text-center text-xs text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer"
-                >
-                  {showRawSession
-                    ? "Hide raw session details"
-                    : "View raw session details"}
-                </button>
-              </div>
-
-              {showRawSession && (
-                <pre className="max-h-56 overflow-auto rounded-lg bg-zinc-950 p-3 text-left font-mono text-xs text-zinc-100 dark:bg-black border border-zinc-800">
-                  {JSON.stringify(session, null, 2)}
-                </pre>
-              )}
             </div>
           ) : (
             /* Logged-Out State: Tabs for Sign In & Sign Up */
