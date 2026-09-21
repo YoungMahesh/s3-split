@@ -1,0 +1,17 @@
+services:
+  sS3Split:
+    image: s3-split:0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cS3Split
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    networks:
+      - s3-split_net
+
+networks:
+  s3-split_net:
+    name: s3-split_net
+    driver: bridge

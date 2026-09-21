@@ -1,0 +1,36 @@
+# Version control
+.git
+.gitignore
+
+# Dependencies
+node_modules
+.pnp
+.pnp.*
+
+# Next.js build output and cache
+.next
+out
+build
+
+# Environment files
+.env*
+!.env
+.env.keys
+.env.docker
+
+# Tests and coverage
+tests
+coverage
+
+# Agent and documentation directories
+.agents
+.scratch
+docs
+*.md
+
+# Logs and system files
+*.log
+*.log*
+.DS_Store
+*.pem
+.vercel
