@@ -1,10 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn, signUp, signOut } from "@/lib/auth-client";
 import { UpstreamAccountsManager } from "@/app/components/upstream-accounts";
 import { ManagedBucketsManager } from "@/app/components/managed-buckets";
+import {
+  Button,
+  Badge,
+  Input,
+  Label,
+  FormGroup,
+  CodeWindow,
+} from "@/app/components/ui";
+
+function RadialSpikeMark({ className = "h-5 w-5 text-[#141413]" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      {/* 4-spoke radial spike glyph */}
+      <path d="M12 2C12.5 7 17 11.5 22 12C17 12.5 12.5 17 12 22C11.5 17 7 12.5 2 12C7 11.5 11.5 7 12 2Z" />
+    </svg>
+  );
+}
 
 export default function HomePage() {
   const router = useRouter();
@@ -130,70 +147,88 @@ export default function HomePage() {
 
   if (session?.user) {
     return (
-      <div className="min-h-screen bg-zinc-50 text-zinc-900 transition-colors dark:bg-zinc-950 dark:text-zinc-100">
-        {/* Navigation Bar */}
-        <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/80 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/80">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-[#faf9f5] text-[#141413]">
+        {/* Top Navigation Bar (64px fixed height with warm cream canvas & bottom hairline border) */}
+        <header className="sticky top-0 z-30 h-16 border-b border-[#e6dfd8] bg-[#faf9f5]/95 backdrop-blur-xs">
+          <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+            {/* Brand Logo & Wordmark */}
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-white font-black dark:bg-zinc-100 dark:text-zinc-900">
-                S3
-              </div>
-              <div>
-                <span className="font-bold text-base tracking-tight text-zinc-900 dark:text-zinc-100">
+              <RadialSpikeMark className="h-5 w-5 text-[#141413]" />
+              <div className="flex items-center gap-2.5">
+                <span className="font-serif text-xl font-medium tracking-tight text-[#141413]">
                   S3-Split
                 </span>
-                <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                <Badge variant="coral" size="sm">
                   Storage Gateway
-                </span>
+                </Badge>
               </div>
             </div>
 
+            {/* Session Info & Actions */}
             <div className="flex items-center gap-4">
               <div className="hidden sm:flex flex-col text-right">
-                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                <span className="text-xs font-semibold text-[#141413]">
                   {session.user.name || "Signed-in User"}
                 </span>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
+                <span className="text-xs text-[#6c6a64] font-mono">
                   {session.user.email}
                 </span>
               </div>
-              <button
-                type="button"
+
+              <div className="hidden sm:block h-6 w-px bg-[#e6dfd8]" aria-hidden="true" />
+
+              <Button
                 id="sign-out-btn"
+                variant="secondary"
+                size="sm"
                 onClick={handleSignOut}
                 disabled={isSubmitting}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950/40 cursor-pointer disabled:opacity-50"
+                className="text-[#c64545] border-[#e6dfd8] hover:border-[#c64545]/30 hover:bg-[#c64545]/5"
               >
                 {isSubmitting ? "Signing out..." : "Sign Out"}
-              </button>
+              </Button>
             </div>
           </div>
         </header>
 
         {/* Main Content Area */}
-        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-10">
           {/* Global Alerts */}
           {errorMessage && (
             <div
               role="alert"
-              className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+              className="rounded-xl border border-[#c64545]/30 bg-[#c64545]/10 p-4 text-sm text-[#9a2c2c] shadow-xs"
             >
-              <p className="font-semibold">Error</p>
-              <p className="mt-0.5">{errorMessage}</p>
+              <div className="flex items-start gap-2.5">
+                <svg className="h-5 w-5 shrink-0 text-[#c64545] mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="font-semibold">Error</p>
+                  <p className="mt-0.5 text-xs text-[#9a2c2c] leading-relaxed">{errorMessage}</p>
+                </div>
+              </div>
             </div>
           )}
 
           {successMessage && (
             <div
               role="status"
-              className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300"
+              className="rounded-xl border border-[#5db8a6]/40 bg-[#5db8a6]/15 p-4 text-sm text-[#1e6155] shadow-xs"
             >
-              <p className="font-semibold">Success</p>
-              <p className="mt-0.5">{successMessage}</p>
+              <div className="flex items-start gap-2.5">
+                <svg className="h-5 w-5 shrink-0 text-[#2b7264] mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <div>
+                  <p className="font-semibold">Success</p>
+                  <p className="mt-0.5 text-xs text-[#1e6155] leading-relaxed">{successMessage}</p>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Upstream Account Connection Section */}
+          {/* Upstream Accounts Section */}
           <section aria-labelledby="upstream-section">
             <UpstreamAccountsManager />
           </section>
@@ -204,35 +239,34 @@ export default function HomePage() {
           </section>
 
           {/* Collapsible Session & Developer Diagnostics */}
-          <section className="pt-6 border-t border-zinc-200 dark:border-zinc-800">
+          <section className="pt-6 border-t border-[#e6dfd8]">
             <button
               type="button"
               onClick={() => setShowRawSession(!showRawSession)}
-              className="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer"
+              className="inline-flex items-center gap-2 text-xs font-medium text-[#6c6a64] hover:text-[#141413] transition-colors cursor-pointer"
             >
-              {showRawSession
-                ? "▼ Hide Session & Diagnostic Details"
-                : "▶ Show Session & Diagnostic Details"}
+              <span>{showRawSession ? "▼" : "▶"}</span>
+              <span>{showRawSession ? "Hide Session & Diagnostic Details" : "Show Session & Diagnostic Details"}</span>
             </button>
 
             {showRawSession && (
-              <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
+              <div className="mt-4 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-950">
-                    <span className="text-zinc-500 block">User ID</span>
-                    <span className="font-mono text-zinc-800 dark:text-zinc-200 truncate block mt-0.5">
+                  <div className="rounded-lg border border-[#e6dfd8] bg-[#efe9de] p-3">
+                    <span className="text-[#6c6a64] block font-medium">User ID</span>
+                    <span className="font-mono text-[#141413] truncate block mt-1">
                       {session.user.id}
                     </span>
                   </div>
-                  <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-950">
-                    <span className="text-zinc-500 block">Session ID</span>
-                    <span className="font-mono text-zinc-800 dark:text-zinc-200 truncate block mt-0.5">
+                  <div className="rounded-lg border border-[#e6dfd8] bg-[#efe9de] p-3">
+                    <span className="text-[#6c6a64] block font-medium">Session ID</span>
+                    <span className="font-mono text-[#141413] truncate block mt-1">
                       {session.session?.id}
                     </span>
                   </div>
-                  <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-950">
-                    <span className="text-zinc-500 block">Expires At</span>
-                    <span className="text-zinc-800 dark:text-zinc-200 block mt-0.5">
+                  <div className="rounded-lg border border-[#e6dfd8] bg-[#efe9de] p-3">
+                    <span className="text-[#6c6a64] block font-medium">Expires At</span>
+                    <span className="text-[#141413] block mt-1">
                       {session.session?.expiresAt
                         ? new Date(session.session.expiresAt).toLocaleString()
                         : "N/A"}
@@ -240,9 +274,11 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <pre className="max-h-56 overflow-auto rounded-lg bg-zinc-950 p-3 text-left font-mono text-xs text-zinc-100 dark:bg-black border border-zinc-800">
-                  {JSON.stringify(session, null, 2)}
-                </pre>
+                <CodeWindow
+                  title="Session Diagnostic Payload"
+                  language="json"
+                  code={JSON.stringify(session, null, 2)}
+                />
               </div>
             )}
           </section>
@@ -252,96 +288,103 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12 text-zinc-900 transition-colors dark:bg-zinc-950 dark:text-zinc-100">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#faf9f5] px-4 py-12 text-[#141413]">
       <main className="w-full max-w-md space-y-6">
         {/* Global Notifications */}
         {errorMessage && (
           <div
             role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+            className="rounded-xl border border-[#c64545]/30 bg-[#c64545]/10 p-4 text-sm text-[#9a2c2c] shadow-xs"
           >
             <p className="font-semibold">Error</p>
-            <p className="mt-0.5">{errorMessage}</p>
+            <p className="mt-0.5 text-xs text-[#9a2c2c]">{errorMessage}</p>
           </div>
         )}
 
         {successMessage && (
           <div
             role="status"
-            className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300"
+            className="rounded-xl border border-[#5db8a6]/40 bg-[#5db8a6]/15 p-4 text-sm text-[#1e6155] shadow-xs"
           >
             <p className="font-semibold">Success</p>
-            <p className="mt-0.5">{successMessage}</p>
+            <p className="mt-0.5 text-xs text-[#1e6155]">{successMessage}</p>
           </div>
         )}
 
         {sessionError && (
           <div
             role="alert"
-            className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300"
+            className="rounded-xl border border-[#e8a55a]/40 bg-[#e8a55a]/15 p-4 text-sm text-[#855013] shadow-xs"
           >
             <p className="font-semibold">Session Warning</p>
-            <p className="mt-0.5">
+            <p className="mt-0.5 text-xs text-[#855013]">
               {sessionError.message || "Failed to retrieve session."}
             </p>
           </div>
         )}
 
-        {/* Card Container */}
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        {/* Unauthenticated Authentication Card */}
+        <div className="overflow-hidden rounded-2xl border border-[#e6dfd8] bg-[#efe9de] shadow-md">
           {isSessionPending ? (
             /* Loading Skeleton */
             <div className="p-8 space-y-4 animate-pulse">
-              <div className="h-6 w-1/2 rounded bg-zinc-200 dark:bg-zinc-800 mx-auto" />
-              <div className="h-4 w-3/4 rounded bg-zinc-100 dark:bg-zinc-850 mx-auto" />
+              <div className="h-7 w-1/2 rounded bg-[#e6dfd8] mx-auto" />
+              <div className="h-4 w-3/4 rounded bg-[#e6dfd8]/60 mx-auto" />
               <div className="space-y-3 pt-4">
-                <div className="h-10 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
-                <div className="h-10 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
-                <div className="h-10 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
+                <div className="h-10 rounded-md bg-[#e6dfd8]" />
+                <div className="h-10 rounded-md bg-[#e6dfd8]" />
+                <div className="h-10 rounded-md bg-[#e6dfd8]" />
               </div>
             </div>
           ) : (
-            /* Logged-Out State: Tabs for Sign In & Sign Up */
             <div>
-              {/* Tab Navigation */}
-              <div className="grid grid-cols-2 border-b border-zinc-200 dark:border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => switchMode("signin")}
-                  className={`py-3.5 text-center text-sm font-medium transition cursor-pointer ${
-                    mode === "signin"
-                      ? "border-b-2 border-zinc-900 font-semibold text-zinc-900 dark:border-zinc-100 dark:text-zinc-50 bg-zinc-50/50 dark:bg-zinc-800/30"
-                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  Sign In
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchMode("signup")}
-                  className={`py-3.5 text-center text-sm font-medium transition cursor-pointer ${
-                    mode === "signup"
-                      ? "border-b-2 border-zinc-900 font-semibold text-zinc-900 dark:border-zinc-100 dark:text-zinc-50 bg-zinc-50/50 dark:bg-zinc-800/30"
-                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  Sign Up
-                </button>
+              {/* Card Header & Brand Voice */}
+              <div className="p-6 sm:p-8 pb-4 text-center border-b border-[#e6dfd8] bg-[#faf9f5]/50">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <RadialSpikeMark className="h-6 w-6 text-[#141413]" />
+                  <span className="font-serif text-2xl font-medium tracking-tight text-[#141413]">
+                    S3-Split
+                  </span>
+                </div>
+                <p className="text-xs text-[#6c6a64] max-w-xs mx-auto">
+                  Multi-tenant S3 gateway enforcing real-time storage quotas with standard SigV4 SDK compatibility.
+                </p>
+
+                {/* Tab Switcher */}
+                <div className="grid grid-cols-2 gap-1 mt-6 rounded-lg bg-[#e8e0d2] p-1 border border-[#e6dfd8]">
+                  <button
+                    type="button"
+                    onClick={() => switchMode("signin")}
+                    className={`py-2 text-center text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                      mode === "signin"
+                        ? "bg-[#faf9f5] text-[#141413] shadow-xs"
+                        : "text-[#6c6a64] hover:text-[#141413]"
+                    }`}
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => switchMode("signup")}
+                    className={`py-2 text-center text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                      mode === "signup"
+                        ? "bg-[#faf9f5] text-[#141413] shadow-xs"
+                        : "text-[#6c6a64] hover:text-[#141413]"
+                    }`}
+                  >
+                    Sign Up
+                  </button>
+                </div>
               </div>
 
               {/* Form Content */}
-              <div className="p-6 sm:p-8">
+              <div className="p-6 sm:p-8 pt-6">
                 {mode === "signin" ? (
                   /* Sign In Form */
                   <form onSubmit={handleSignIn} className="space-y-4">
-                    <div className="space-y-1 text-left">
-                      <label
-                        htmlFor="signin-email"
-                        className="block text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300"
-                      >
-                        Email
-                      </label>
-                      <input
+                    <FormGroup>
+                      <Label htmlFor="signin-email">Email</Label>
+                      <Input
                         id="signin-email"
                         type="email"
                         required
@@ -349,18 +392,12 @@ export default function HomePage() {
                         placeholder="you@example.com"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="block w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-300 dark:focus:ring-zinc-300"
                       />
-                    </div>
+                    </FormGroup>
 
-                    <div className="space-y-1 text-left">
-                      <label
-                        htmlFor="signin-password"
-                        className="block text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300"
-                      >
-                        Password
-                      </label>
-                      <input
+                    <FormGroup>
+                      <Label htmlFor="signin-password">Password</Label>
+                      <Input
                         id="signin-password"
                         type="password"
                         required
@@ -368,24 +405,25 @@ export default function HomePage() {
                         placeholder="••••••••"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="block w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-300 dark:focus:ring-zinc-300"
                       />
-                    </div>
+                    </FormGroup>
 
-                    <button
+                    <Button
                       type="submit"
-                      disabled={isSubmitting}
-                      className="mt-2 flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                      variant="primary"
+                      size="md"
+                      isLoading={isSubmitting}
+                      className="w-full mt-2"
                     >
-                      {isSubmitting ? "Signing in..." : "Sign In"}
-                    </button>
+                      Sign In
+                    </Button>
 
-                    <p className="pt-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                    <p className="pt-2 text-center text-xs text-[#6c6a64]">
                       Don&apos;t have an account?{" "}
                       <button
                         type="button"
                         onClick={() => switchMode("signup")}
-                        className="font-semibold text-zinc-900 hover:underline dark:text-zinc-100 cursor-pointer"
+                        className="font-semibold text-[#cc785c] hover:underline cursor-pointer"
                       >
                         Create one now
                       </button>
@@ -394,33 +432,22 @@ export default function HomePage() {
                 ) : (
                   /* Sign Up Form */
                   <form onSubmit={handleSignUp} className="space-y-4">
-                    <div className="space-y-1 text-left">
-                      <label
-                        htmlFor="signup-name"
-                        className="block text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300"
-                      >
-                        Name
-                      </label>
-                      <input
+                    <FormGroup>
+                      <Label htmlFor="signup-name">Full Name</Label>
+                      <Input
                         id="signup-name"
                         type="text"
                         required
                         autoComplete="name"
-                        placeholder="John Doe"
+                        placeholder="Ada Lovelace"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="block w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-300 dark:focus:ring-zinc-300"
                       />
-                    </div>
+                    </FormGroup>
 
-                    <div className="space-y-1 text-left">
-                      <label
-                        htmlFor="signup-email"
-                        className="block text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300"
-                      >
-                        Email
-                      </label>
-                      <input
+                    <FormGroup>
+                      <Label htmlFor="signup-email">Email</Label>
+                      <Input
                         id="signup-email"
                         type="email"
                         required
@@ -428,18 +455,12 @@ export default function HomePage() {
                         placeholder="you@example.com"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="block w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-300 dark:focus:ring-zinc-300"
                       />
-                    </div>
+                    </FormGroup>
 
-                    <div className="space-y-1 text-left">
-                      <label
-                        htmlFor="signup-password"
-                        className="block text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300"
-                      >
-                        Password
-                      </label>
-                      <input
+                    <FormGroup>
+                      <Label htmlFor="signup-password">Password</Label>
+                      <Input
                         id="signup-password"
                         type="password"
                         required
@@ -447,24 +468,25 @@ export default function HomePage() {
                         placeholder="••••••••"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="block w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-300 dark:focus:ring-zinc-300"
                       />
-                    </div>
+                    </FormGroup>
 
-                    <button
+                    <Button
                       type="submit"
-                      disabled={isSubmitting}
-                      className="mt-2 flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                      variant="primary"
+                      size="md"
+                      isLoading={isSubmitting}
+                      className="w-full mt-2"
                     >
-                      {isSubmitting ? "Creating account..." : "Sign Up"}
-                    </button>
+                      Create Account
+                    </Button>
 
-                    <p className="pt-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                    <p className="pt-2 text-center text-xs text-[#6c6a64]">
                       Already have an account?{" "}
                       <button
                         type="button"
                         onClick={() => switchMode("signin")}
-                        className="font-semibold text-zinc-900 hover:underline dark:text-zinc-100 cursor-pointer"
+                        className="font-semibold text-[#cc785c] hover:underline cursor-pointer"
                       >
                         Sign in
                       </button>

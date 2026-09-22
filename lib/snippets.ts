@@ -11,6 +11,7 @@ export interface IntegrationSnippets {
   node: string;
   python: string;
   awsCli: string;
+  curl: string;
 }
 
 export function generateEnvSnippet(options: SnippetOptions): string {
@@ -77,11 +78,27 @@ aws configure set region "${region}" --profile s3-split
 aws s3 ls s3://${options.bucketName}/ --endpoint-url ${options.endpointUrl} --profile s3-split`;
 }
 
+export function generateCurlSnippet(options: SnippetOptions): string {
+  const region = options.region || "us-east-1";
+  return `# List objects via S3 gateway proxy with SigV4 signed curl
+curl -X GET "${options.endpointUrl}/${options.bucketName}/" \\
+  --aws-sigv4 "aws:amz:${region}:s3" \\
+  --user "${options.accessKeyId}:${options.secretAccessKey}"
+
+# Upload object via S3 gateway proxy
+curl -X PUT "${options.endpointUrl}/${options.bucketName}/example.txt" \\
+  --aws-sigv4 "aws:amz:${region}:s3" \\
+  --user "${options.accessKeyId}:${options.secretAccessKey}" \\
+  -H "Content-Type: text/plain" \\
+  -d "Hello from S3-Split!"`;
+}
+
 export function generateAllSnippets(options: SnippetOptions): IntegrationSnippets {
   return {
     env: generateEnvSnippet(options),
     node: generateNodeSnippet(options),
     python: generatePythonSnippet(options),
     awsCli: generateAwsCliSnippet(options),
+    curl: generateCurlSnippet(options),
   };
 }

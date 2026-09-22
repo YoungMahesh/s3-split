@@ -1,8 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { formatBytes, type StorageQuotaUnit } from "@/lib/quota";
 import { ClientKeysModal } from "./client-keys-modal";
+import {
+  Button,
+  Card,
+  Badge,
+  Modal,
+  Input,
+  Select,
+  Label,
+  FormGroup,
+  Progress,
+} from "@/app/components/ui";
 
 export interface ManagedBucketItem {
   id: string;
@@ -63,8 +74,9 @@ export function ManagedBucketsManager() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
-  // Deletion State
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Deletion Modal State
+  const [deletingBucket, setDeletingBucket] = useState<ManagedBucketItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Object Inspection Modal
   const [inspectedBucket, setInspectedBucket] = useState<ManagedBucketItem | null>(null);
@@ -206,18 +218,12 @@ export function ManagedBucketsManager() {
     }
   };
 
-  const handleDeleteBucket = async (bucket: ManagedBucketItem) => {
-    if (
-      !confirm(
-        `Are you sure you want to delete managed bucket "${bucket.name}"? This removes object tracking and client associations.`,
-      )
-    ) {
-      return;
-    }
+  const confirmDeleteBucket = async () => {
+    if (!deletingBucket) return;
 
-    setDeletingId(bucket.id);
+    setIsDeleting(true);
     try {
-      const res = await fetch(`/api/managed-buckets/${bucket.id}`, {
+      const res = await fetch(`/api/managed-buckets/${deletingBucket.id}`, {
         method: "DELETE",
       });
 
@@ -227,11 +233,12 @@ export function ManagedBucketsManager() {
         return;
       }
 
+      setDeletingBucket(null);
       await loadData();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to delete bucket");
     } finally {
-      setDeletingId(null);
+      setIsDeleting(false);
     }
   };
 
@@ -299,15 +306,12 @@ export function ManagedBucketsManager() {
       const formattedDrift = `${driftPrefix}${formatBytes(reconciliation.driftBytes)}`;
       setReconcileMessage({
         type: "success",
-        text: `Reconciliation complete: ${reconciliation.addedCount} added, ${reconciliation.deletedCount} deleted, ${reconciliation.updatedCount} updated. Drift: ${formattedDrift}. Total storage: ${formatBytes(reconciliation.usedBytes)}.`,
+        text: `Reconciliation complete: verified ${reconciliation.upstreamCount} upstream objects. Net drift: ${formattedDrift}. Quota synced.`,
       });
     } catch (err: unknown) {
       setReconcileMessage({
         type: "error",
-        text:
-          err instanceof Error
-            ? err.message
-            : "An unexpected error occurred during storage reconciliation.",
+        text: err instanceof Error ? err.message : "Reconciliation failed.",
       });
     } finally {
       setIsReconciling(false);
@@ -316,15 +320,15 @@ export function ManagedBucketsManager() {
 
   return (
     <div className="space-y-6">
-      {/* Success Notification */}
+      {/* Top Banner Notifications */}
       {formSuccess && (
         <div
           role="status"
-          className="flex items-start justify-between rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-900 shadow-xs dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300"
+          className="flex items-start justify-between rounded-xl border border-[#5db8a6]/40 bg-[#5db8a6]/15 p-4 text-sm text-[#1e6155] shadow-xs"
         >
           <div className="flex items-center gap-2">
             <svg
-              className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400"
+              className="h-5 w-5 shrink-0 text-[#2b7264]"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -341,580 +345,443 @@ export function ManagedBucketsManager() {
           <button
             type="button"
             onClick={() => setFormSuccess(null)}
-            className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-200"
+            className="text-[#2b7264] hover:text-[#141413] cursor-pointer"
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* Header Bar */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* Header and Action */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#e6dfd8] pb-5">
         <div>
-          <h2
-            id="buckets-section"
-            className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100"
-          >
-            Managed Buckets
-          </h2>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Define storage targets with strictly enforced byte quotas, 1:1 physical mappings, or isolated virtual prefixes.
+          <div className="flex items-center gap-3">
+            <h2 className="font-serif text-2xl font-medium tracking-tight text-[#141413]">
+              Managed Buckets
+            </h2>
+            <Badge variant="coral" size="sm">
+              Quota Enforcement
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs sm:text-sm text-[#6c6a64]">
+            Isolated storage targets governed by strict byte quotas. Downstream applications authenticate using Client Keys via S3 proxy.
           </p>
         </div>
 
-        <button
-          type="button"
-          id="create-managed-bucket-btn"
+        <Button
+          id="create-bucket-btn"
+          variant="primary"
           onClick={() => {
-            setFormError(null);
+            resetForm();
             setIsModalOpen(true);
           }}
           disabled={upstreamAccounts.length === 0}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-xs transition-all hover:bg-indigo-500 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          className="shrink-0"
         >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           Create Managed Bucket
-        </button>
+        </Button>
       </div>
 
+      {/* Upstream Account Prerequisite Warning */}
       {upstreamAccounts.length === 0 && !isLoading && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
-          <p className="font-semibold">Upstream Account Required</p>
-          <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-400">
-            Connect an Upstream Account above before creating a Managed Bucket.
-          </p>
+        <div className="rounded-xl border border-[#e8a55a]/40 bg-[#e8a55a]/15 p-4 text-xs text-[#855013]">
+          Connect at least one Upstream Account above before creating a Managed Bucket.
         </div>
       )}
 
-      {/* Bucket List / Cards */}
+      {/* Managed Buckets Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((n) => (
-            <div
-              key={n}
-              className="h-56 animate-pulse rounded-2xl border border-zinc-200 bg-zinc-100/50 p-6 dark:border-zinc-800 dark:bg-zinc-900/50"
-            />
-          ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-pulse">
+          <div className="h-56 rounded-xl bg-[#efe9de]" />
+          <div className="h-56 rounded-xl bg-[#efe9de]" />
         </div>
       ) : fetchError ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
-          {fetchError}
+        <div className="rounded-xl border border-[#c64545]/30 bg-[#c64545]/10 p-5 text-sm text-[#9a2c2c]">
+          <p className="font-semibold">Failed to load managed buckets</p>
+          <p className="mt-1 text-xs">{fetchError}</p>
         </div>
       ) : buckets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white/50 p-12 text-center dark:border-zinc-800 dark:bg-zinc-900/20">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400">
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#e6dfd8] bg-[#faf9f5] p-12 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#efe9de] text-[#cc785c] mb-3 border border-[#e6dfd8]">
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={1.5}
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
               />
             </svg>
           </div>
-          <h3 className="mt-4 text-base font-semibold text-zinc-900 dark:text-zinc-100">
-            No Managed Buckets configured
+          <h3 className="font-serif text-lg font-medium text-[#141413]">
+            No Managed Buckets Created
           </h3>
-          <p className="mt-1 max-w-sm text-xs text-zinc-500 dark:text-zinc-400">
-            Create a Managed Bucket to allocate an isolated storage namespace with an enforced byte quota.
+          <p className="mt-1 max-w-sm text-xs text-[#6c6a64] leading-relaxed">
+            Create a managed bucket target (physical bucket or virtual prefix partition) with a defined byte quota to issue client credentials.
           </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsModalOpen(true)}
+            disabled={upstreamAccounts.length === 0}
+            className="mt-4"
+          >
+            Create First Managed Bucket
+          </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {buckets.map((bucket) => {
-            const isExceeded = bucket.status === "quota_exceeded" || bucket.progress.isExceeded;
-            const percentage = bucket.progress.percentage;
-
-            // Determine bar color
-            const barColor = isExceeded
-              ? "bg-red-500"
-              : percentage >= 80
-                ? "bg-amber-500"
-                : "bg-emerald-500";
+            const isExceeded = bucket.status === "quota_exceeded" || bucket.progress.percentage >= 100;
+            const isApproaching = !isExceeded && bucket.progress.percentage >= 75;
 
             return (
-              <div
-                key={bucket.id}
-                className="flex flex-col justify-between rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
-              >
-                <div>
-                  {/* Top Row: Name & Status Badge */}
-                  <div className="flex items-start justify-between gap-2">
+              <Card key={bucket.id} variant="card" className="flex flex-col justify-between">
+                <div className="p-5 sm:p-6 space-y-4">
+                  {/* Bucket Header: Name and Type Badge */}
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="font-mono text-base font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                        {bucket.name}
-                      </h3>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                        Account: <span className="font-medium text-zinc-700 dark:text-zinc-300">{bucket.upstreamAccountName || "External S3"}</span>
-                      </p>
-                    </div>
-
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                        isExceeded
-                          ? "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400 border border-red-200 dark:border-red-900"
-                          : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900"
-                      }`}
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full ${isExceeded ? "bg-red-500" : "bg-emerald-500"}`} />
-                      {isExceeded ? "Quota Exceeded" : "Active"}
-                    </span>
-                  </div>
-
-                  {/* Mapping Type & Target */}
-                  <div className="mt-3 rounded-lg bg-zinc-50 p-2.5 text-xs dark:bg-zinc-950 space-y-1">
-                    <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400">
-                      <span>Mapping</span>
-                      <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                        {bucket.bucketType === "physical" ? "Physical 1:1" : "Virtual Prefix"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400">
-                      <span>Target</span>
-                      <span className="font-mono text-zinc-800 dark:text-zinc-200 truncate max-w-45">
-                        {bucket.upstreamBucket}
-                      </span>
-                    </div>
-                    {bucket.virtualPrefix && (
-                      <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400">
-                        <span>Prefix</span>
-                        <span className="font-mono text-indigo-600 dark:text-indigo-400 truncate max-w-45">
-                          {bucket.virtualPrefix}
+                      <div className="flex items-center gap-2">
+                        <span className="font-serif text-xl font-medium tracking-tight text-[#141413]">
+                          {bucket.name}
                         </span>
+                        {bucket.bucketType === "virtual_prefix" ? (
+                          <Badge variant="coral" size="sm">
+                            Virtual Prefix
+                          </Badge>
+                        ) : (
+                          <Badge variant="cream" size="sm">
+                            Physical Bucket
+                          </Badge>
+                        )}
                       </div>
-                    )}
+                      <div className="mt-1 flex items-center gap-2 text-xs text-[#6c6a64]">
+                        <span>Upstream: <strong className="text-[#3d3d3a]">{bucket.upstreamAccountName || "External S3"}</strong></span>
+                        <span>•</span>
+                        <span className="font-mono text-[#3d3d3a]">{bucket.upstreamBucket}</span>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Capacity Progress Bar */}
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-zinc-600 dark:text-zinc-300">
-                        Storage Capacity
+                  {/* Virtual Prefix indicator if applicable */}
+                  {bucket.bucketType === "virtual_prefix" && bucket.virtualPrefix && (
+                    <div className="rounded-lg bg-[#faf9f5] border border-[#e6dfd8] p-2.5 text-xs font-mono text-[#6c6a64]">
+                      <span className="text-[10px] font-sans font-semibold uppercase text-[#8e8b82] block">
+                        Partition Prefix
                       </span>
-                      <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">
-                        {bucket.progress.formattedUsed} / {bucket.progress.formattedQuota} ({percentage}%)
+                      <span className="text-[#141413] mt-0.5 block truncate select-all">
+                        {bucket.virtualPrefix}
                       </span>
                     </div>
+                  )}
 
-                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                      <div
-                        className={`h-full transition-all duration-500 ${barColor}`}
-                        style={{ width: `${Math.min(percentage, 100)}%` }}
-                      />
-                    </div>
-
-                    {isExceeded && (
-                      <p className="text-[11px] text-red-600 dark:text-red-400 font-medium">
-                        Storage quota breached. Write operations will be rejected.
-                      </p>
-                    )}
+                  {/* Harmonious Quota Progress Meter */}
+                  <div className="pt-1">
+                    <Progress
+                      percentage={bucket.progress.percentage}
+                      usedFormatted={bucket.progress.formattedUsed}
+                      quotaFormatted={bucket.progress.formattedQuota}
+                      showBadge={true}
+                      showDetails={true}
+                    />
                   </div>
+
+                  {/* Quota Status Warning Banners */}
+                  {isExceeded && (
+                    <div className="rounded-lg border border-[#c64545]/30 bg-[#c64545]/10 p-3 text-xs text-[#9a2c2c] leading-relaxed">
+                      <strong>Storage Quota Exceeded:</strong> PutObject operations will be rejected with HTTP 507 QuotaExceeded until existing objects are deleted.
+                    </div>
+                  )}
+
+                  {isApproaching && (
+                    <div className="rounded-lg border border-[#cc785c]/30 bg-[#cc785c]/10 p-3 text-xs text-[#a9583e] leading-relaxed">
+                      <strong>Approaching Quota:</strong> Over 75% of allocated storage capacity is utilized.
+                    </div>
+                  )}
                 </div>
 
-                {/* Bottom Actions */}
-                <div className="mt-5 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleInspectObjects(bucket)}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 cursor-pointer"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                    </svg>
-                    {bucket.objectCount} {bucket.objectCount === 1 ? "object" : "objects"}
-                  </button>
+                {/* Footer Actions */}
+                <div className="border-t border-[#e6dfd8] bg-[#f5f0e8]/50 px-5 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleInspectObjects(bucket)}
+                    >
+                      Objects ({bucket.objectCount})
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setKeysModalBucket(bucket)}
+                      className="border-[#cc785c]/30 text-[#cc785c] hover:bg-[#cc785c]/10"
+                    >
+                      Client Keys
+                    </Button>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setKeysModalBucket(bucket)}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-700 hover:text-indigo-600 dark:text-zinc-300 dark:hover:text-indigo-400 cursor-pointer"
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => setDeletingBucket(bucket)}
                   >
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                      />
-                    </svg>
-                    Keys
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteBucket(bucket)}
-                    disabled={deletingId === bucket.id}
-                    className="text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 cursor-pointer disabled:opacity-50"
-                  >
-                    {deletingId === bucket.id ? "Deleting..." : "Delete"}
-                  </button>
+                    Delete
+                  </Button>
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
       )}
 
       {/* Create Managed Bucket Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
-              <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                Create Managed Bucket
-              </h3>
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="Create Managed Bucket"
+        description="Allocate an upstream storage target governed by an enforced byte quota."
+        maxWidth="xl"
+      >
+        {formError && (
+          <div
+            role="alert"
+            className="rounded-xl border border-[#c64545]/30 bg-[#c64545]/10 p-4 text-xs text-[#9a2c2c]"
+          >
+            {formError}
+          </div>
+        )}
+
+        <form onSubmit={handleCreateBucket} className="space-y-4">
+          <FormGroup>
+            <Label htmlFor="bucket-name">Bucket Name (Tenant Unique)</Label>
+            <Input
+              id="bucket-name"
+              type="text"
+              required
+              placeholder="e.g. app-assets or user-uploads"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="font-mono"
+            />
+            <p className="text-[11px] text-[#8e8b82]">
+              Lowercase alphanumeric, hyphens, and dots (3 to 63 chars).
+            </p>
+          </FormGroup>
+
+          <FormGroup>
+            <Label htmlFor="upstream-account-select">Upstream Provider Account</Label>
+            <Select
+              id="upstream-account-select"
+              value={selectedAccountId}
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+              required
+            >
+              {upstreamAccounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} ({acc.region})
+                </option>
+              ))}
+            </Select>
+          </FormGroup>
+
+          <FormGroup>
+            <Label htmlFor="upstream-physical-bucket">Upstream Bucket Target</Label>
+            <Input
+              id="upstream-physical-bucket"
+              type="text"
+              required
+              placeholder="e.g. my-cloud-storage-bucket"
+              value={upstreamBucket}
+              onChange={(e) => setUpstreamBucket(e.target.value)}
+              className="font-mono"
+            />
+          </FormGroup>
+
+          <FormGroup>
+            <Label>Bucket Isolation Mode</Label>
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setIsModalOpen(false);
-                  resetForm();
-                }}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            {formError && (
-              <div
-                role="alert"
-                className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
-              >
-                {formError}
-              </div>
-            )}
-
-            <form onSubmit={handleCreateBucket} className="mt-4 space-y-4">
-              {/* Upstream Account Select */}
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  Upstream Account
-                </label>
-                <select
-                  value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                  required
-                  className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-xs focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                >
-                  {upstreamAccounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} ({acc.region})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Tenant Bucket Name */}
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  Tenant-Scoped Bucket Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. app-assets"
-                  className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 font-mono text-sm text-zinc-900 shadow-xs focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                />
-                <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  The logical bucket name exposed to your downstream apps (3-63 lowercase alphanumeric characters).
-                </p>
-              </div>
-
-              {/* Upstream Physical Bucket */}
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  Upstream Physical Bucket Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={upstreamBucket}
-                  onChange={(e) => setUpstreamBucket(e.target.value)}
-                  placeholder="e.g. my-company-raw-s3"
-                  className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 font-mono text-sm text-zinc-900 shadow-xs focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                />
-              </div>
-
-              {/* Bucket Type Radio */}
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  Mapping Mode
-                </label>
-                <div className="mt-2 grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setBucketType("physical")}
-                    className={`rounded-xl border p-3 text-left transition-all cursor-pointer ${
-                      bucketType === "physical"
-                        ? "border-indigo-600 bg-indigo-50/50 dark:border-indigo-500 dark:bg-indigo-950/30"
-                        : "border-zinc-200 bg-zinc-50/50 hover:bg-zinc-100/50 dark:border-zinc-700 dark:bg-zinc-800/40"
-                    }`}
-                  >
-                    <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                      Physical (1:1)
-                    </div>
-                    <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Maps directly to the entire upstream bucket.
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setBucketType("virtual_prefix")}
-                    className={`rounded-xl border p-3 text-left transition-all cursor-pointer ${
-                      bucketType === "virtual_prefix"
-                        ? "border-indigo-600 bg-indigo-50/50 dark:border-indigo-500 dark:bg-indigo-950/30"
-                        : "border-zinc-200 bg-zinc-50/50 hover:bg-zinc-100/50 dark:border-zinc-700 dark:bg-zinc-800/40"
-                    }`}
-                  >
-                    <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                      Virtual Prefix
-                    </div>
-                    <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Partitions bucket using an isolated prefix (split/&lt;id&gt;/).
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Storage Quota */}
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  Storage Quota Limit
-                </label>
-                <div className="mt-1.5 flex gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={quotaValue}
-                    onChange={(e) => setQuotaValue(e.target.value)}
-                    className="w-2/3 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-xs focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                  />
-                  <select
-                    value={quotaUnit}
-                    onChange={(e) => setQuotaUnit(e.target.value as StorageQuotaUnit)}
-                    className="w-1/3 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-900 shadow-xs focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                  >
-                    <option value="MB">MB</option>
-                    <option value="GB">GB</option>
-                    <option value="TB">TB</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Notice Banner */}
-              <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
-                <p className="font-semibold">Baseline Crawl Notice</p>
-                <p className="mt-0.5 text-[11px] text-blue-800 dark:text-blue-400">
-                  S3-Split will immediately scan upstream objects via ListObjectsV2 to calculate current baseline usage.
-                </p>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    resetForm();
-                  }}
-                  className="rounded-xl border border-zinc-200 px-4 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-indigo-500 disabled:opacity-50 cursor-pointer"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      Scanning & Creating...
-                    </>
-                  ) : (
-                    "Create Managed Bucket"
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Object Inspection / Bucket Detail Modal */}
-      {inspectedBucket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-3xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-            {/* Modal Header */}
-            <div className="flex flex-col gap-3 pb-4 border-b border-zinc-100 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 font-mono">
-                    {inspectedBucket.name}
-                  </h3>
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                      inspectedBucket.status === "quota_exceeded" || inspectedBucket.progress.isExceeded
-                        ? "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400 border border-red-200 dark:border-red-900"
-                        : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900"
-                    }`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        inspectedBucket.status === "quota_exceeded" || inspectedBucket.progress.isExceeded
-                          ? "bg-red-500"
-                          : "bg-emerald-500"
-                      }`}
-                    />
-                    {inspectedBucket.status === "quota_exceeded" || inspectedBucket.progress.isExceeded
-                      ? "Quota Exceeded"
-                      : "Active"}
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  Target: <span className="font-mono text-zinc-700 dark:text-zinc-300">{inspectedBucket.upstreamBucket}</span>
-                  {inspectedBucket.virtualPrefix && (
-                    <span> (prefix: <span className="font-mono text-indigo-600 dark:text-indigo-400">{inspectedBucket.virtualPrefix}</span>)</span>
-                  )}
-                  {" • "}
-                  Capacity: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{inspectedBucket.progress.formattedUsed} / {inspectedBucket.progress.formattedQuota} ({inspectedBucket.progress.percentage}%)</span>
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  id="reconcile-storage-btn"
-                  onClick={() => handleReconcileStorage(inspectedBucket.id)}
-                  disabled={isReconciling}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition-all hover:bg-indigo-500 active:scale-98 disabled:opacity-50 cursor-pointer"
-                >
-                  {isReconciling ? (
-                    <>
-                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      Reconciling Storage...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Reconcile Storage
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setInspectedBucket(null)}
-                  className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
-                  title="Close"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {/* Reconciliation Feedback Alert */}
-            {reconcileMessage && (
-              <div
-                role="status"
-                className={`mt-4 flex items-center justify-between rounded-xl border p-3 text-xs ${
-                  reconcileMessage.type === "success"
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300"
-                    : "border-red-200 bg-red-50 text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+                onClick={() => setBucketType("physical")}
+                className={`p-3 text-left rounded-lg border text-xs transition-colors cursor-pointer ${
+                  bucketType === "physical"
+                    ? "border-[#cc785c] bg-[#faf9f5] ring-1 ring-[#cc785c]"
+                    : "border-[#e6dfd8] bg-[#faf9f5] hover:bg-[#efe9de]"
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    {reconcileMessage.type === "success" ? (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    ) : (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    )}
-                  </svg>
-                  <span>{reconcileMessage.text}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setReconcileMessage(null)}
-                  className="ml-3 font-semibold hover:opacity-75 cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
+                <span className="font-semibold block text-[#141413]">
+                  Physical Bucket
+                </span>
+                <span className="text-[#6c6a64] text-[11px] block mt-0.5">
+                  1:1 mapping with upstream bucket
+                </span>
+              </button>
 
-            {/* Tracked Objects Table */}
-            <div className="mt-4 max-h-96 overflow-auto">
-              {isLoadingObjects ? (
-                <div className="py-12 text-center text-xs text-zinc-500 dark:text-zinc-400 animate-pulse">
-                  Loading tracked objects...
-                </div>
-              ) : bucketObjects.length === 0 ? (
-                <div className="py-10 text-center text-xs text-zinc-500 dark:text-zinc-400">
-                  No objects indexed in this bucket yet. Click &ldquo;Reconcile Storage&rdquo; to scan upstream S3.
-                </div>
-              ) : (
-                <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 border-b border-zinc-200 bg-zinc-50 font-semibold text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-                    <tr>
-                      <th className="py-2.5 px-3">Object Key</th>
-                      <th className="py-2.5 px-3">Size</th>
-                      <th className="py-2.5 px-3">ETag</th>
-                      <th className="py-2.5 px-3">Last Modified</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-                    {bucketObjects.map((obj) => (
-                      <tr key={obj.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
-                        <td className="py-2 px-3 font-mono text-zinc-900 dark:text-zinc-100 break-all">
-                          {obj.key}
-                        </td>
-                        <td className="py-2 px-3 font-medium text-zinc-700 dark:text-zinc-300 whitespace-nowrap">
-                          {formatBytes(obj.sizeBytes)}
-                        </td>
-                        <td className="py-2 px-3 font-mono text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-30">
-                          {obj.etag || "-"}
-                        </td>
-                        <td className="py-2 px-3 text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
-                          {obj.lastModified
-                            ? new Date(obj.lastModified).toLocaleString()
-                            : "-"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="mt-4 flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400">
-              <div>
-                <span>{bucketObjects.length} active tracked {bucketObjects.length === 1 ? "object" : "objects"}</span>
-                {bucketObjects.length > 0 && (
-                  <span className="ml-2 font-medium text-zinc-700 dark:text-zinc-300">
-                    ({formatBytes(bucketObjects.reduce((acc, o) => acc + o.sizeBytes, 0))})
-                  </span>
-                )}
-              </div>
               <button
                 type="button"
-                onClick={() => setInspectedBucket(null)}
-                className="rounded-xl border border-zinc-200 px-4 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
+                onClick={() => setBucketType("virtual_prefix")}
+                className={`p-3 text-left rounded-lg border text-xs transition-colors cursor-pointer ${
+                  bucketType === "virtual_prefix"
+                    ? "border-[#cc785c] bg-[#faf9f5] ring-1 ring-[#cc785c]"
+                    : "border-[#e6dfd8] bg-[#faf9f5] hover:bg-[#efe9de]"
+                }`}
               >
-                Close
+                <span className="font-semibold block text-[#141413]">
+                  Virtual Prefix Partition
+                </span>
+                <span className="text-[#6c6a64] text-[11px] block mt-0.5">
+                  Isolated prefix inside shared bucket
+                </span>
               </button>
             </div>
+          </FormGroup>
+
+          <FormGroup>
+            <Label htmlFor="quota-value">Storage Quota Cap</Label>
+            <div className="flex gap-2">
+              <Input
+                id="quota-value"
+                type="number"
+                min="0.001"
+                step="any"
+                required
+                value={quotaValue}
+                onChange={(e) => setQuotaValue(e.target.value)}
+                className="w-2/3"
+              />
+              <Select
+                value={quotaUnit}
+                onChange={(e) => setQuotaUnit(e.target.value as StorageQuotaUnit)}
+                className="w-1/3"
+              >
+                <option value="MB">MB</option>
+                <option value="GB">GB</option>
+                <option value="TB">TB</option>
+              </Select>
+            </div>
+          </FormGroup>
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#e6dfd8]">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsModalOpen(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              isLoading={isSubmitting}
+            >
+              {isSubmitting ? "Creating & Crawling..." : "Create Bucket"}
+            </Button>
           </div>
-        </div>
+        </form>
+      </Modal>
+
+      {/* Object Inspection & Reconciliation Modal */}
+      {inspectedBucket && (
+        <Modal
+          isOpen={Boolean(inspectedBucket)}
+          onClose={() => setInspectedBucket(null)}
+          title={`Object Explorer — ${inspectedBucket.name}`}
+          description={`Tracked objects and upstream synchronization for bucket ${inspectedBucket.name}.`}
+          maxWidth="3xl"
+        >
+          {reconcileMessage && (
+            <div
+              role="alert"
+              className={`rounded-xl border p-4 text-xs leading-relaxed ${
+                reconcileMessage.type === "success"
+                  ? "border-[#5db8a6]/40 bg-[#5db8a6]/15 text-[#1e6155]"
+                  : "border-[#c64545]/30 bg-[#c64545]/10 text-[#9a2c2c]"
+              }`}
+            >
+              {reconcileMessage.text}
+            </div>
+          )}
+
+          {/* Sync Header Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-xl bg-[#efe9de] border border-[#e6dfd8]">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#6c6a64]">Used Capacity:</span>
+                <span className="font-mono text-xs font-bold text-[#141413]">
+                  {formatBytes(inspectedBucket.usedBytes)} / {formatBytes(inspectedBucket.storageQuotaBytes)}
+                </span>
+                <Badge variant={inspectedBucket.status === "quota_exceeded" ? "crimson" : "teal"} size="sm" dot>
+                  {inspectedBucket.status === "quota_exceeded" ? "Quota Exceeded" : "Healthy"}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-[#8e8b82] mt-0.5">
+                {bucketObjects.length} object{bucketObjects.length === 1 ? "" : "s"} indexed in registry.
+              </p>
+            </div>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              isLoading={isReconciling}
+              onClick={() => handleReconcileStorage(inspectedBucket.id)}
+            >
+              <svg className="h-3.5 w-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Reconcile Upstream
+            </Button>
+          </div>
+
+          {/* Object Table */}
+          {isLoadingObjects ? (
+            <div className="p-8 text-center text-xs text-[#6c6a64] animate-pulse">
+              Loading tracked objects...
+            </div>
+          ) : bucketObjects.length === 0 ? (
+            <div className="p-8 text-center text-xs text-[#6c6a64] border border-dashed border-[#e6dfd8] rounded-xl bg-[#faf9f5]">
+              No objects stored yet in this managed bucket.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-[#e6dfd8] bg-[#faf9f5]">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-[#e6dfd8] bg-[#efe9de] text-[11px] font-semibold uppercase text-[#6c6a64]">
+                  <tr>
+                    <th scope="col" className="px-4 py-2.5">Key</th>
+                    <th scope="col" className="px-4 py-2.5">Size</th>
+                    <th scope="col" className="px-4 py-2.5">ETag</th>
+                    <th scope="col" className="px-4 py-2.5">Last Modified</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#e6dfd8] font-mono">
+                  {bucketObjects.map((obj) => (
+                    <tr key={obj.id} className="hover:bg-[#efe9de]/50 transition-colors">
+                      <td className="px-4 py-2.5 text-[#141413] font-medium max-w-xs truncate">
+                        {obj.key}
+                      </td>
+                      <td className="px-4 py-2.5 text-[#3d3d3a] whitespace-nowrap">
+                        {formatBytes(obj.sizeBytes)}
+                      </td>
+                      <td className="px-4 py-2.5 text-[#8e8b82] max-w-xs truncate">
+                        {obj.etag || "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-[#6c6a64] font-sans whitespace-nowrap">
+                        {obj.lastModified ? new Date(obj.lastModified).toLocaleString() : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal>
       )}
 
       {/* Client Keys Modal */}
@@ -924,6 +791,40 @@ export function ManagedBucketsManager() {
           onClose={() => setKeysModalBucket(null)}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(deletingBucket)}
+        onClose={() => setDeletingBucket(null)}
+        title="Delete Managed Bucket"
+        maxWidth="md"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setDeletingBucket(null)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger-fill"
+              size="sm"
+              isLoading={isDeleting}
+              onClick={confirmDeleteBucket}
+            >
+              Delete Bucket
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-[#3d3d3a] leading-relaxed">
+          Are you sure you want to delete managed bucket{" "}
+          <strong className="text-[#141413]">{deletingBucket?.name}</strong>?
+          This removes object tracking and client credential associations.
+        </p>
+      </Modal>
     </div>
   );
 }
