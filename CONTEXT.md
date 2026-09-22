@@ -40,4 +40,5 @@ See `docs/adr/` for key architectural decisions:
 - [ADR 0007: Tenant-Scoped Bucket Names](docs/adr/0007-tenant-scoped-bucket-names.md)
 - [ADR 0008: Claude Editorial Design System](docs/adr/0008-claude-editorial-design-system.md)
 - [ADR 0009: Isolated PostgreSQL Template Testing Architecture](docs/adr/0009-isolated-postgresql-template-testing.md)
+- [ADR 0010: Public Landing Page and Dashboard Route Separation](docs/adr/0010-public-landing-page-and-dashboard-separation.md)
 
