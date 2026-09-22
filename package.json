@@ -1,6 +1,6 @@
 {
   "name": "s3-split",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "dotenvx run -- next dev",
@@ -9,6 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "dotenvx run -- vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "dotenvx run -- vitest run --project integration",
     "test:watch": "dotenvx run -- vitest",
     "db-generate": "dotenvx run -- drizzle-kit generate",
     "db-migrate": "dotenvx run -- drizzle-kit migrate"

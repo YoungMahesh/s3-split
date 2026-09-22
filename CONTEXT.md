@@ -28,3 +28,16 @@ _Avoid_: File, blob, S3 record
 A temporary byte allocation reserved during an active multipart upload to prevent over-quota breaches before completion.
 _Avoid_: Pending bytes, chunk lock
 
+## Architecture Decisions
+
+See `docs/adr/` for key architectural decisions:
+- [ADR 0001: S3 Gateway Proxy](docs/adr/0001-s3-gateway-proxy.md)
+- [ADR 0002: Virtual Prefix Buckets](docs/adr/0002-virtual-prefix-buckets.md)
+- [ADR 0003: SigV4 Gateway in Next.js](docs/adr/0003-sigv4-gateway-in-nextjs.md)
+- [ADR 0004: Secret Encryption at Rest](docs/adr/0004-secret-encryption-at-rest.md)
+- [ADR 0005: Database Object Registry](docs/adr/0005-database-object-registry.md)
+- [ADR 0006: Baseline Upstream Scan on Creation](docs/adr/0006-baseline-upstream-scan-on-creation.md)
+- [ADR 0007: Tenant-Scoped Bucket Names](docs/adr/0007-tenant-scoped-bucket-names.md)
+- [ADR 0008: Claude Editorial Design System](docs/adr/0008-claude-editorial-design-system.md)
+- [ADR 0009: Isolated PostgreSQL Template Testing Architecture](docs/adr/0009-isolated-postgresql-template-testing.md)
+

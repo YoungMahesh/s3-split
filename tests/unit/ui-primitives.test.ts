@@ -100,7 +100,7 @@ describe("UI Primitives & Design System", () => {
     }
 
     it("ensures no dark:* Tailwind pseudo-classes exist in any app TSX/TS file", () => {
-      const appDir = path.resolve(__dirname, "../app");
+      const appDir = path.resolve(__dirname, "../../app");
       const appFiles = getFiles(appDir);
       const darkRegex = /\bdark:[a-zA-Z0-9_-]+/;
 
@@ -113,7 +113,7 @@ describe("UI Primitives & Design System", () => {
           const match = line.match(darkRegex);
           if (match) {
             violatingFiles.push({
-              file: path.relative(path.resolve(__dirname, ".."), file),
+              file: path.relative(path.resolve(__dirname, "../.."), file),
               line: index + 1,
               match: match[0],
             });
